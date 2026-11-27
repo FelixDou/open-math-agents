@@ -46,6 +46,38 @@ def H2 : Prop :=
 
 section Proof
 
+/-- Orient each component so its exceptional edge disagrees with the colour
+of its endpoints. The argument works for infinite components as well. -/
+theorem component_coloring : H1 := by
+  intro V L hp c hc
+  classical
+  choose side a b hs using hp
+  let adapt (C : L.ConnectedComponent) (x : V) :=
+    if side C x = side C (a C) then !(c (a C) (b C)) else c (a C) (b C)
+  refine ⟨fun x => adapt (L.connectedComponentMk x) x, ?_⟩
+  intro x y hxy
+  let C := L.connectedComponentMk x
+  have he : L.connectedComponentMk y = C :=
+    (SimpleGraph.ConnectedComponent.connectedComponentMk_eq_of_adj hxy).symm
+  change ¬ (adapt C x = c x y ∧ adapt (L.connectedComponentMk y) y = c x y)
+  rw [he]
+  rintro ⟨hx, hy⟩
+  have inj (i j r k : Bool) :
+      (if i = r then !k else k) = (if j = r then !k else k) → i = j := by
+    cases i <;> cases j <;> cases r <;> cases k <;> decide
+  have hside := inj (side C x) (side C y) (side C (a C)) (c (a C) (b C)) (hx.trans hy.symm)
+  have flip (k : Bool) : (!k) ≠ k := by cases k <;> decide
+  rcases hs C x y hxy rfl hside with ⟨hxa, hyb⟩ | ⟨hxb, hya⟩
+  · have hx' := hx
+    rw [show adapt C x = !(c (a C) (b C)) by simp [adapt, hxa]] at hx'
+    rw [hxa, hyb] at hx'
+    exact flip _ hx'
+  · have hy' := hy
+    rw [show adapt C y = !(c (a C) (b C)) by simp [adapt, hya]] at hy'
+    rw [hxb, hya, hc (b C) (a C)] at hy'
+    exact flip _ hy'
+
+
 private theorem H_attained {n : ℕ} (F : SimpleGraph (Fin n)) (hF : F.CliqueFree 3) :
     ∃ s, F.IsNIndepSet (Erdos151.H n) s := by
   let sizes : Set ℕ :=
@@ -319,6 +351,10 @@ theorem main : H1 → H2 → type_of% @Erdos151.erdos_151.variants.cliqueFree_fo
       apply not_forall.mp
       exact fun hall => hn ⟨v, hv, hall⟩)
     exact hbad (transversal_of_edge_coloring G c hs hc)
+
+/-- Only the residual extremal case remains after the component argument. -/
+theorem bound_of_residual : H2 → type_of% @Erdos151.erdos_151.variants.cliqueFree_four :=
+  main component_coloring
 
 end Proof
 
