@@ -29,6 +29,8 @@ import Mathlib.Data.Set.Card
 For m ≥ 256 this file bounds the combined contribution of every nilpotent group
 of odd order below 2^m. The pointwise bound also applies to even orders when
 11 * v₂(n) ≤ 7 * m and compares with the counts at m, m-1, and m-2.
+At infinitely many dyadic endpoints the proof covers all nilpotent groups
+of smaller order, including all smaller powers of two.
 
 The lower-bound construction below is reproduced from @kamaleshanantha, PR
 393, revision 32f058d79b9fa0970b1a92cc8894b281af5fd849. The central-extension
@@ -882,21 +884,22 @@ theorem odd_prime_exponent {p a m : ℕ} (hp : 3 ≤ p) (ha : p^a ≤ 2^m) :
     _ ≤ (2^m)^7 := Nat.pow_le_pow_left ha 7
     _ = 2^(7*m) := by rw [← pow_mul, Nat.mul_comm]
 
+private theorem prime_count_from_exponent {p k t : ℕ} (hp : p.Prime) (hk : k ≤ t) :
+    g (p^k)^6 ≤ (p^k)^(t^2) := by
+  calc
+    g (p^k)^6 ≤ g (p^k)^6*p^k := Nat.le_mul_of_pos_right _ (pow_pos hp.pos k)
+    _ ≤ p^(k^3) := PrimePower.group_count_prime_power p k hp
+    _ = (p^k)^(k^2) := by rw [← pow_mul]; congr 1; ring
+    _ ≤ _ := Nat.pow_le_pow_right (pow_pos hp.pos _) (Nat.pow_le_pow_left hk 2)
+
 theorem product_budget {n t : ℕ} (hn : 0 < n)
     (ht : ∀ p ∈ n.primeFactors, n.factorization p ≤ t) :
     (∏ p ∈ n.primeFactors, g (p ^ n.factorization p))^6 ≤ n^(t^2) := by
   rw [← Finset.prod_pow]
   calc
     _ ≤ ∏ p ∈ n.primeFactors, (p ^ n.factorization p) ^ (t^2) := by
-      refine Finset.prod_le_prod' fun p hp => ?_
-      let a := n.factorization p
-      have prime := Nat.prime_of_mem_primeFactors hp
-      have h : g (p^a)^6 * p^a ≤ p^(a^3) := PrimePower.group_count_prime_power p a prime
-      calc
-        g (p^a)^6 ≤ g (p^a)^6 * p^a := Nat.le_mul_of_pos_right _ (pow_pos prime.pos _)
-        _ ≤ p^(a^3) := h
-        _ = (p^a)^(a^2) := by rw [← pow_mul]; congr 1; ring
-        _ ≤ (p^a)^(t^2) := Nat.pow_le_pow_right (pow_pos prime.pos _) (Nat.pow_le_pow_left (ht p hp) 2)
+      exact Finset.prod_le_prod' fun p hp =>
+        prime_count_from_exponent (Nat.prime_of_mem_primeFactors hp) (ht p hp)
     _ = _ := by rw [Finset.prod_pow, ← Nat.prod_primeFactors_pow_factorization hn.ne']
 
 /-- Uniform slack suffices to compare even the total number across a dyadic interval
@@ -945,23 +948,29 @@ theorem small_two_part {n m j : ℕ} (hm : 256 ≤ m) (hjm : j ≤ m) (hmj : m �
     (Nat.pow_le_pow_left hnm _)
 
 
-/-- The same estimate summed over any set of eligible orders. -/
-theorem sum_small_two_part {m j : ℕ} (hm : 256 ≤ m) (hjm : j ≤ m) (hmj : m ≤ j+2)
-    (s : Finset ℕ) (hs : s ⊆ Finset.Ico 1 (2^m))
-    (h2 : ∀ n ∈ s, 11*n.factorization 2 ≤ 7*m) :
+private theorem sum_of_uniform {m j : ℕ} (s : Finset ℕ) (hc : s.card ≤ 2^m)
+    (pointwise : ∀ n ∈ s, 2^(2*m)*(classes n).ncard ≤ g (2^j)) :
     2^m * (∑ n ∈ s, (classes n).ncard) ≤ g (2^j) := by
   let b := g (2^j) / 2^(2*m)
   have hb (n : ℕ) (hn : n ∈ s) : (classes n).ncard ≤ b := by
     apply (Nat.le_div_iff_mul_le (by positivity : 0 < 2^(2*m))).2
     rw [Nat.mul_comm]
-    have hn' := Finset.mem_Ico.mp (hs hn)
-    exact small_two_part hm hjm hmj hn'.1 hn'.2.le (h2 n hn)
-  have hc : s.card ≤ 2^m := (Finset.card_le_card hs).trans (by simp)
+    exact pointwise n hn
   calc
     _ ≤ 2^m * (s.card*b) := Nat.mul_le_mul_left _ (s.sum_le_card_nsmul _ _ hb)
     _ ≤ 2^m * (2^m * b) := Nat.mul_le_mul_left _ (Nat.mul_le_mul_right _ hc)
     _ = 2^(2*m) * b := by rw [← mul_assoc, ← pow_add, two_mul]
     _ ≤ _ := Nat.mul_div_le _ _
+
+/-- The same estimate summed over any set of eligible orders. -/
+theorem sum_small_two_part {m j : ℕ} (hm : 256 ≤ m) (hjm : j ≤ m) (hmj : m ≤ j+2)
+    (s : Finset ℕ) (hs : s ⊆ Finset.Ico 1 (2^m))
+    (h2 : ∀ n ∈ s, 11*n.factorization 2 ≤ 7*m) :
+    2^m * (∑ n ∈ s, (classes n).ncard) ≤ g (2^j) := by
+  apply sum_of_uniform s ((Finset.card_le_card hs).trans (by simp))
+  intro n hn
+  have hn' := Finset.mem_Ico.mp (hs hn)
+  exact small_two_part hm hjm hmj hn'.1 hn'.2.le (h2 n hn)
 
 theorem odd_nilpotent_sum (m : ℕ) (hm : 256 ≤ m) :
     2^m * (∑ n ∈ (Finset.Ico 1 (2^m)).filter Odd, (classes n).ncard) ≤ g (2^m) := by
@@ -981,6 +990,162 @@ theorem prime_power_classes (p a : ℕ) (hp : p.Prime) :
   congr 2
   ext G
   exact ⟨fun h => h.1, fun h => ⟨h, (IsPGroup.of_card h).isNilpotent⟩⟩
+
+end Erdos1160.NilpotentCount
+
+open Filter Finset
+namespace Erdos1160.NilpotentCount
+
+/-- No constant can absorb the gap between the cubic coefficient 1/14
+and Higman's 2/27. -/
+private theorem unbounded_scores :
+    ¬ ∃ B : ℕ, ∀ m : ℕ, g (2^m)^14 ≤ 2^(m^3+B) := by
+  rintro ⟨B,hB⟩
+  let m := 200+27*B
+  have hL := Nat.pow_le_pow_left
+    (Erdos1160Growth.SharpFamily.higman_lower_all m (by dsimp [m]; omega)) 14
+  have hU := Nat.pow_le_pow_left (hB m) 27
+  have hP : 2^(28*m^3) ≤ 2^(27*(m^3+B)+168*m^2) := by
+    calc
+      _ = (2^(2*m^3))^14 := by rw [← pow_mul]; congr 1; ring
+      _ ≤ _ := hL
+      _ = (g (2^m)^14)^27 * 2^(168*m^2) := by
+        rw [mul_pow, ← pow_mul, ← pow_mul, ← pow_mul]; congr 2; ring
+      _ ≤ (2^(m^3+B))^27 * 2^(168*m^2) := Nat.mul_le_mul_right _ hU
+      _ = _ := by rw [← pow_mul, ← pow_add]; congr 1; ring
+  have hc := (Nat.pow_le_pow_iff_right (a := 2) (by decide)).mp hP
+  dsimp [m] at hc
+  nlinarith only [hc, Nat.zero_le B, Nat.zero_le (B^2), Nat.zero_le (B^3)]
+
+private theorem frequent_records : ∃ᶠ m : ℕ in atTop, ∀ a < m,
+    g (2^a)^14 * 2^(m^3) ≤ g (2^m)^14 * 2^(a^3) := by
+  rw [Filter.frequently_atTop]
+  intro N
+  by_contra! h
+  let B := ∑ i ∈ Finset.range N, g (2^i)^14
+  apply unbounded_scores
+  refine ⟨B, fun m => ?_⟩
+  induction m using Nat.strong_induction_on with
+  | h m ih =>
+    by_cases hm : m < N
+    · have hB : g (2^m)^14 ≤ B :=
+        Finset.single_le_sum (f := fun i : ℕ => g (2^i)^14) (fun _ _ => Nat.zero_le _) (Finset.mem_range.mpr hm)
+      exact hB.trans ((Nat.le_of_lt (Nat.lt_two_pow_self (n := B))).trans
+        (Nat.pow_le_pow_right (by decide) (by omega)))
+    · obtain ⟨a,ha,hma⟩ := h m (by omega)
+      apply Nat.le_of_mul_le_mul_right (c := 2^(a^3)) _ (by positivity)
+      calc
+        _ ≤ _ := hma.le
+        _ ≤ 2^(a^3+B) * 2^(m^3) := Nat.mul_le_mul_right _ (ih a ha)
+        _ = _ := by rw [← pow_add, ← pow_add]; congr 1; omega
+
+private theorem record_budget {a m d t U : ℕ} (hm : 1024 ≤ m) (ham : a+d=m)
+    (hd : 0 < d) (ht : 11*t ≤ 7*d) (hU : U^6 ≤ (2^d)^(t^2))
+    (rec : g (2^a)^14 * 2^(m^3) ≤ g (2^m)^14 * 2^(a^3)) :
+    2^(2*m) * (g (2^a)*U) ≤ g (2^m) := by
+  have htm : 11*t ≤ 7*m := by omega
+  have sq := Nat.mul_le_mul_left d (Nat.pow_le_pow_left htm 2)
+  have hmarg : 10164*m ≤ 20*m^2 := by
+    obtain ⟨k,rfl⟩ := Nat.exists_eq_add_of_le hm
+    nlinarith only [Nat.zero_le k, Nat.zero_le (k^2)]
+  have hscale := Nat.mul_le_mul_right (20*m^2) (show 1 ≤ d by omega)
+  have gap : d*m^2 + a^3 ≤ m^3 := by
+    rw [← ham]; nlinarith only [Nat.zero_le (a^2*d), Nat.zero_le (a*d^2)]
+  have expo : 3*a^3 + 7*d*t^2 + 84*m ≤ 3*m^3 := by
+    nlinarith only [sq, hmarg, hscale, gap]
+  have hr : g (2^a)^42 * 2^(3*m^3) ≤ g (2^m)^42 * 2^(3*a^3) := by
+    have h := Nat.pow_le_pow_left rec 3
+    simpa only [mul_pow, ← pow_mul, Nat.mul_comm (m^3) 3, Nat.mul_comm (a^3) 3] using h
+  have hu : (U^6)^7 ≤ 2^(7*d*t^2) := by
+    calc
+      _ ≤ ((2^d)^(t^2))^7 := Nat.pow_le_pow_left hU 7
+      _ = _ := by rw [← pow_mul, ← pow_mul]; congr 1; ring
+  apply (Nat.pow_le_pow_iff_left (by decide : 42 ≠ 0)).mp
+  apply Nat.le_of_mul_le_mul_right (c := 2^(3*m^3)) _ (by positivity)
+  calc
+    _ = (g (2^a)^42 * 2^(3*m^3)) * (U^6)^7 * 2^(84*m) := by
+      rw [mul_pow, mul_pow, ← pow_mul, ← pow_mul, show 2*m*42 = 84*m by ring, show 6*7 = 42 by decide]
+      ring
+    _ ≤ (g (2^m)^42 * 2^(3*a^3)) * 2^(7*d*t^2) * 2^(84*m) := by gcongr
+    _ = g (2^m)^42 * 2^(3*a^3 + 7*d*t^2 + 84*m) := by rw [pow_add, pow_add]; ac_rfl
+    _ ≤ _ := Nat.mul_le_mul_left _ (Nat.pow_le_pow_right (by decide) expo)
+
+/-- On a record dyadic order every nilpotent population of smaller order is small. -/
+private theorem nilpotent_at_record {m n : ℕ} (hm : 1024 ≤ m) (hn : 0 < n) (hnm : n < 2^m)
+    (rec : ∀ a < m, g (2^a)^14 * 2^(m^3) ≤ g (2^m)^14 * 2^(a^3)) :
+    2^(2*m)*(classes n).ncard ≤ g (2^m) := by
+  classical
+  by_cases even : 2 ∈ n.primeFactors
+  · let a := n.factorization 2
+    let d := m-a
+    let ps := n.primeFactors.erase 2
+    let q := ∏ p ∈ ps, p ^ n.factorization p
+    let U := ∏ p ∈ ps, g (p ^ n.factorization p)
+    have hq : 2^a*q = n := by
+      exact (Finset.mul_prod_erase n.primeFactors (fun p => p ^ n.factorization p) even).trans
+        (Nat.prod_primeFactors_pow_factorization hn.ne').symm
+    have qpos : 0 < q := Nat.pos_of_mul_pos_left (hq.symm ▸ hn)
+    have hlow : 2^a ≤ n := hq ▸ Nat.le_mul_of_pos_right _ qpos
+    have ha := (Nat.pow_lt_pow_iff_right (a := 2) (by decide)).mp (hlow.trans_lt hnm)
+    have ham : a+d=m := by dsimp [d]; omega
+    have qsmall : q ≤ 2^d := by
+      apply Nat.le_of_mul_le_mul_left (c := 2^a) _ (by positivity)
+      rw [hq, ← pow_add, ham]
+      omega
+    let t := 7*d/11
+    have hprime (p : ℕ) (hp : p ∈ ps) := Nat.prime_of_mem_primeFactors (Finset.mem_erase.mp hp).2
+    have each (p : ℕ) (hp : p ∈ ps) : n.factorization p ≤ t := by
+      have neq := (Finset.mem_erase.mp hp).1
+      have pp := (hprime p hp).two_le
+      have dvd : p ^ n.factorization p ∣ q := Finset.dvd_prod_of_mem _ hp
+      have := odd_prime_exponent (by omega : 3 ≤ p) ((Nat.le_of_dvd qpos dvd).trans qsmall)
+      dsimp [t]; omega
+    have budget : U^6 ≤ (2^d)^(t^2) := by
+      dsimp only [U]
+      rw [← Finset.prod_pow]
+      calc
+        _ ≤ ∏ p ∈ ps, (p ^ n.factorization p)^(t^2) := by
+          exact Finset.prod_le_prod' fun p hp => prime_count_from_exponent (hprime p hp) (each p hp)
+        _ = q^(t^2) := Finset.prod_pow ..
+        _ ≤ _ := Nat.pow_le_pow_left qsmall _
+    have size : (classes n).ncard ≤ g (2^a)*U := (sylow_product_bound n).trans_eq
+      (Finset.mul_prod_erase n.primeFactors (fun p => g (p ^ n.factorization p)) even).symm
+    exact (Nat.mul_le_mul_left _ size).trans
+      (record_budget hm ham (by dsimp [d]; omega) (by dsimp [t]; omega) budget (rec a ha))
+  · have h2 : n.factorization 2 = 0 := by
+      apply Nat.factorization_eq_zero_of_not_dvd
+      intro hd
+      exact even (Nat.mem_primeFactors.mpr ⟨Nat.prime_two,hd,hn.ne'⟩)
+    exact small_two_part (by omega) (le_refl m) (by omega) hn hnm.le (by simp [h2])
+
+/-- Infinitely many dyadic orders dominate all smaller nilpotent groups combined
+by a factor of at least 2^m. -/
+theorem frequently_nilpotent_sum : ∃ᶠ m : ℕ in atTop,
+    2^m * (∑ n ∈ Finset.Ico 1 (2^m), (classes n).ncard) ≤ g (2^m) := by
+  apply (frequent_records.and_eventually (eventually_ge_atTop 1024)).mono
+  rintro m ⟨rec,hm⟩
+  apply sum_of_uniform _ (by simp)
+  intro n hn
+  exact nilpotent_at_record hm (Finset.mem_Ico.mp hn).1 (Finset.mem_Ico.mp hn).2 rec
+
+/-- In particular the pure powers of two satisfy a strengthened R2.H1 infinitely often. -/
+theorem frequently_power_sum : ∃ᶠ m : ℕ in atTop,
+    2^m * (∑ k ∈ Finset.range m, g (2^k)) ≤ g (2^m) := by
+  apply frequently_nilpotent_sum.mono
+  intro m h
+  apply le_trans (Nat.mul_le_mul_left _ ?_) h
+  let s := (Finset.range m).image (fun k : ℕ => 2^k)
+  have subset : s ⊆ Finset.Ico 1 (2^m) := by
+    intro n hn
+    obtain ⟨k,hk,rfl⟩ := Finset.mem_image.mp hn
+    exact Finset.mem_Ico.mpr ⟨Nat.one_le_two_pow, Nat.pow_lt_pow_right (by decide) (Finset.mem_range.mp hk)⟩
+  calc
+    _ = ∑ k ∈ Finset.range m, (classes (2^k)).ncard :=
+      Finset.sum_congr rfl (fun k _ => (prime_power_classes 2 k Nat.prime_two).symm)
+    _ = ∑ n ∈ s, (classes n).ncard := by
+      dsimp only [s]
+      rw [Finset.sum_image (fun i _ j _ hij => (Nat.pow_right_injective (by decide : 2 ≤ 2)) hij)]
+    _ ≤ _ := Finset.sum_le_sum_of_subset_of_nonneg subset (fun _ _ _ => Nat.zero_le _)
 
 end Erdos1160.NilpotentCount
 
