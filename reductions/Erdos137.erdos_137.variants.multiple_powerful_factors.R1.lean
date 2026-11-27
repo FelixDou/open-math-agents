@@ -9,7 +9,9 @@ distinct primes of the required multiplicity. -/
 namespace OMA.R_Erdos137_erdos_137_variants_multiple_powerful_factors_R1
 
 /-- Below the square threshold only a large prime divisor is needed.
-This follows from Theorem 1 of P. Erdős, On consecutive integers (1955). -/
+Theorem 1 of P. Erdős, On consecutive integers (1955), guarantees such a divisor
+in a block of length at most C b / log b starting above b. For each fixed a,
+this length is eventually at most the requested floor of b/a. -/
 def H1 : Prop :=
   ∀ a : ℕ, 0 < a → ∀ᶠ b in Filter.atTop, ∀ t : ℕ, b ≤ t → t + b / a ≤ b ^ 2 →
     ∃ x p : ℕ, t < x ∧ x ≤ t + b / a ∧ b < p ∧ p.Prime ∧ p ∣ x
